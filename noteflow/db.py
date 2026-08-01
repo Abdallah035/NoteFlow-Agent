@@ -99,7 +99,24 @@ def add_note(conn, title: str, body: str, tags: list[str] | None = None) -> int:
     _audit(conn, "add", note_id, None, after, now)
 
     conn.commit()
+    _save_chunks(conn, note_id)
     return note_id
+
+
+def _save_chunks(conn, note_id):
+    """Chunk the note and store its vectors. Does nothing if embeddings are off.
+
+    Imported here rather than at the top of the file so the database layer
+    does not need the embedding libraries to work.
+    """
+    from noteflow import embeddings
+
+    if not embeddings.enabled():
+        return
+
+    note = get_note(conn, note_id)
+    if note:
+        embeddings.save_embedding(conn, note)
 
 
 def _row_to_note(row) -> dict:
@@ -159,6 +176,7 @@ def update_note(conn, note_id, title=None, body=None, tags=None,
     after = get_note(conn, note_id)
     _audit(conn, "update", note_id, before, after, now)
     conn.commit()
+    _save_chunks(conn, note_id)      # the text changed, so redo the vectors
     return after
 
 
@@ -208,4 +226,42 @@ def delete_note(conn, note_id: int) -> dict | None:
     conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))
     _audit(conn, "delete", note_id, before, None, _utc_now())
     conn.commit()
+    _remove_chunks(note_id)
     return before
+
+
+def _remove_chunks(note_id):
+    """Delete a note's vectors from Chroma.
+
+    SQLite does this by itself through ON DELETE CASCADE, but Chroma is a
+    separate store, so we have to ask it.
+    """
+    from noteflow import vectorstore
+
+    if vectorstore.enabled():
+        vectorstore.remove(note_id)
+
+
+def count_notes(conn) -> int:
+    """How many notes there are."""
+    return conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+
+
+def delete_all_notes(conn) -> int:
+    """Delete every note and return how many were removed.
+
+    One audit row keeps all of them, so the content is still recoverable
+    from the log afterwards.
+    """
+    notes = search_notes(conn, limit=100000)
+    if not notes:
+        return 0
+
+    conn.execute("DELETE FROM notes")
+    _audit(conn, "delete_all", None, notes, None, _utc_now())
+    conn.commit()
+
+    for note in notes:
+        _remove_chunks(note["id"])
+
+    return len(notes)

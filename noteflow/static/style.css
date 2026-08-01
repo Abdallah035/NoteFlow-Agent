@@ -1,0 +1,188 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, "Segoe UI", sans-serif;
+  background: #f4f5f7;
+  color: #1c1e21;
+  height: 100vh;
+}
+
+.layout {
+  display: flex;
+  height: 100vh;
+  max-width: 1100px;
+  margin: 0 auto;
+  gap: 16px;
+  padding: 16px;
+}
+
+/* ---------- chat ---------- */
+
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #dcdfe4;
+  overflow: hidden;
+}
+
+header {
+  padding: 14px 18px;
+  border-bottom: 1px solid #dcdfe4;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+h1 { font-size: 18px; }
+
+.hint { font-size: 13px; color: #6b7280; }
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  font-size: 15px;
+}
+
+.msg.user {
+  align-self: flex-end;
+  background: #2563eb;
+  color: #fff;
+}
+
+.msg.agent {
+  align-self: flex-start;
+  background: #eef0f3;
+}
+
+/* ---------- buttons for choices ---------- */
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 18px 10px;
+}
+
+.options button {
+  padding: 8px 14px;
+  border: 1px solid #2563eb;
+  background: #fff;
+  color: #2563eb;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.options button:hover { background: #2563eb; color: #fff; }
+
+.options button.yes { border-color: #16a34a; color: #16a34a; }
+.options button.yes:hover { background: #16a34a; color: #fff; }
+
+.options button.no { border-color: #dc2626; color: #dc2626; }
+.options button.no:hover { background: #dc2626; color: #fff; }
+
+/* ---------- input ---------- */
+
+.input-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid #dcdfe4;
+}
+
+.input-row input {
+  flex: 1;
+  padding: 11px 14px;
+  border: 1px solid #cbd0d6;
+  border-radius: 8px;
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.input-row input:focus { outline: 2px solid #2563eb; border-color: transparent; }
+
+.input-row button {
+  padding: 11px 20px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+/* ---------- sidebar ---------- */
+
+.sidebar {
+  width: 290px;
+  background: #fff;
+  border: 1px solid #dcdfe4;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.side-head {
+  padding: 14px 16px;
+  border-bottom: 1px solid #dcdfe4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+h2 { font-size: 15px; }
+
+.small {
+  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid #cbd0d6;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.notes { flex: 1; overflow-y: auto; padding: 10px; }
+
+.note {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.note .title { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+.note .body { font-size: 13px; color: #4b5563; margin-bottom: 5px; }
+.note .meta { font-size: 11px; color: #9ca3af; }
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #4338ca;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-right: 4px;
+}
+
+.empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 20px; }
+
+@media (max-width: 800px) {
+  .layout { flex-direction: column; }
+  .sidebar { width: auto; max-height: 200px; }
+}

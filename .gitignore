@@ -18,7 +18,11 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Testing and experiment scripts, not part of the app
 tests/
+try_search.py
+try_tools.py
 noteflow/dbcli.py
 # Editor
 .vscode/

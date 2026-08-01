@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NoteFlow</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <div class="layout">
+
+    <main class="chat">
+      <header>
+        <h1>NoteFlow</h1>
+        <span class="hint">Talk to your notes</span>
+      </header>
+
+      <div id="messages" class="messages">
+        <div class="msg agent">
+          <div dir="auto">
+            Hi. I can add, search, update and delete your notes.<br>
+            Try: <em>Save a note about the team standup, we moved it to Tuesdays</em>
+          </div>
+        </div>
+      </div>
+
+      <div id="options" class="options"></div>
+
+      <form id="form" class="input-row">
+        <input id="input" type="text" dir="auto" autocomplete="off"
+               placeholder="Type a message..." autofocus>
+        <button type="submit">Send</button>
+      </form>
+    </main>
+
+    <aside class="sidebar">
+      <div class="side-head">
+        <h2>Your notes</h2>
+        <button id="seed" class="small">Seed demo</button>
+      </div>
+      <div id="notes" class="notes"></div>
+    </aside>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

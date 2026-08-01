@@ -59,6 +59,18 @@ _ARABIC_STOPWORDS = {
 _STOPWORDS = _ENGLISH_STOPWORDS | _ARABIC_STOPWORDS
 
 
+def _strip_arabic_prefix(word: str) -> str:
+    """Remove 'ال' (the) from the front of an Arabic word.
+
+    Arabic glues 'the' onto the word, so "السداد" and "سداد" are the same
+    word written two ways. English never has this problem because "the" is
+    a separate word we can drop as a stopword.
+    """
+    if len(word) > 4 and word.startswith("ال"):
+        return word[2:]
+    return word
+
+
 def tokenize(text: str) -> list[str]:
     """Split text into comparable words, dropping filler words.
 
@@ -66,7 +78,34 @@ def tokenize(text: str) -> list[str]:
     an empty list for every Arabic note, so they would never match anything.
     """
     words = re.findall(r"\w+", normalize_text(text), re.UNICODE)
+    words = [_strip_arabic_prefix(w) for w in words]
     return [w for w in words if w not in _STOPWORDS and len(w) > 1]
+
+
+def _same_word(a: str, b: str) -> bool:
+    """True if two words look like the same word.
+
+    Catches "meeting" and "meetings". Arabic broken plurals like
+    "فاتورة" and "فواتير" are left to the embeddings in embeddings.py.
+    """
+    if a == b:
+        return True
+    return len(a) >= 4 and len(b) >= 4 and (a.startswith(b) or b.startswith(a))
+
+
+def _overlap(query_tokens: set, text_tokens: set) -> float:
+    """What fraction of the query words appear in the text."""
+    if not query_tokens or not text_tokens:
+        return 0.0
+
+    found = 0
+    for query_word in query_tokens:
+        for text_word in text_tokens:
+            if _same_word(query_word, text_word):
+                found += 1
+                break
+
+    return found / len(query_tokens)
 
 
 def title_score(query: str, title: str) -> float:
@@ -86,7 +125,7 @@ def title_score(query: str, title: str) -> float:
         return 0.0
 
     # What fraction of the words the user asked for did we find?
-    overlap = len(q_tokens & t_tokens) / len(q_tokens)
+    overlap = _overlap(q_tokens, t_tokens)
 
     # A title that is the query plus a little extra is still a very good
     # match: "API" against "API migration".
@@ -102,13 +141,7 @@ def body_score(query: str, body: str) -> float:
     Divided by the query length, not the body length, so a long note is not
     punished for being long.
     """
-    q_tokens = set(tokenize(query))
-    b_tokens = set(tokenize(body))
-
-    if not q_tokens or not b_tokens:
-        return 0.0
-
-    return len(q_tokens & b_tokens) / len(q_tokens)
+    return _overlap(set(tokenize(query)), set(tokenize(body)))
 
 
 def recency_score(created_at: str, now: datetime | None = None) -> float:
@@ -194,6 +227,10 @@ STRONG = 0.75      # above this we are confident
 WEAK = 0.35        # below this it is not a real match
 TIE_GAP = 0.10     # two scores this close are a tie, not a winner
 
+# When keywords find nothing, we fall back to meaning alone. Real matches
+# score about 0.4 and above, unrelated notes about 0.1, so this sits between.
+SEMANTIC_ONLY = 0.35
+
 
 def match(note_ref: str, notes: list[dict], semantic_scores: dict | None = None,
           now: datetime | None = None) -> tuple[str, list[dict]]:
@@ -213,15 +250,28 @@ def match(note_ref: str, notes: list[dict], semantic_scores: dict | None = None,
                 return ONE_MATCH, [note]
         # No note with that id, so fall through and treat "3" as a search word.
 
+    # First try with words only. Keyword matches are precise, so when they
+    # work we trust them.
     scored = []
     for note in notes:
-        semantic = (semantic_scores or {}).get(note["id"])
-        score = score_note(note_ref, note, semantic=semantic, now=now)
+        score = score_note(note_ref, note, now=now)
         scored.append({**note, "score": score})
 
     scored.sort(key=lambda n: n["score"], reverse=True)
-
     good = [n for n in scored if n["score"] >= WEAK]
+
+    # The words found nothing. Now try meaning instead, which can connect
+    # "فواتير" to "فاتورة" or "delayed deployment" to "release postponed".
+    if not good and semantic_scores:
+        by_meaning = []
+        for note in notes:
+            score = semantic_scores.get(note["id"], 0.0)
+            if score >= SEMANTIC_ONLY:
+                by_meaning.append({**note, "score": score})
+
+        by_meaning.sort(key=lambda n: n["score"], reverse=True)
+        good = by_meaning
+
     if not good:
         return NONE, []
 

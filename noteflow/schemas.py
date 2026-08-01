@@ -11,13 +11,13 @@ from pydantic import BaseModel, Field
 
 
 class AddNote(BaseModel):
-    """Save a NEW note.
+    """Actually save a note, AFTER the user has agreed to a preview.
 
-    Use when the user gives you content to remember: "save a note...",
-    "write this down", "remember that...", or when they paste text to keep.
+    Never call this first. Call preview_add first and wait for the user to
+    say yes. Only then call this with the exact values they accepted.
 
-    Do NOT use this to change an existing note — use update_note for that.
-    Do NOT use this for questions about notes already saved — use search_notes.
+    Do NOT use this to change an existing note — use preview_update.
+    Do NOT use this for questions about saved notes — use search_notes.
     """
 
     title: str = Field(
@@ -109,17 +109,139 @@ class SearchNotes(BaseModel):
     )
 
 
+class PreviewAdd(BaseModel):
+    """Show the user the note you propose to save, and ask them to confirm.
+
+    This does NOT save anything. It only shows the note and asks.
+
+    Call this FIRST whenever the user gives you something to remember.
+    If they then ask for a change ("shorter title", "add tag work"), call
+    this again with the corrected values. Repeat until they agree.
+
+    Only after the user clearly agrees do you call add_note.
+    """
+
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=120,
+        description=(
+            "The title you propose, 3-8 words, in the user's language. Use "
+            "their words if they gave a title."
+        ),
+    )
+    body: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "The note content in the user's own words, without the command "
+            "part. Do not summarise or translate it."
+        ),
+    )
+    tags: list[str] = Field(
+        default_factory=list,
+        description="Lowercase topic labels. Use [] when unsure.",
+    )
+
+
+class PreviewUpdate(BaseModel):
+    """Show the user what an update would change, and ask them to confirm.
+
+    This does NOT change anything.
+
+    Call search_notes first so you know which note you mean. Only call this
+    once you have a real note id. After the user agrees, call update_note.
+    """
+
+    note_ref: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "The id of the note, as a number, taken from a previous "
+            "search_notes result. Only use words if you have no id."
+        ),
+    )
+    title: str | None = Field(None, max_length=120,
+                              description="New title, or leave empty to keep it.")
+    body: str | None = Field(
+        None,
+        description="Text to add or to replace, or leave empty to keep it.",
+    )
+    body_mode: Literal["append", "replace"] = Field(
+        "append",
+        description=(
+            "'append' adds and keeps the old text. 'replace' erases it. "
+            "Choose append when unsure."
+        ),
+    )
+    tags: list[str] | None = Field(None, description="Tags to add or set.")
+    tags_mode: Literal["append", "replace"] = Field(
+        "append", description="'append' keeps the old tags, 'replace' drops them."
+    )
+
+
+class PreviewDelete(BaseModel):
+    """Show the user which note would be deleted, and ask them to confirm.
+
+    This does NOT delete anything.
+
+    Call search_notes first. Only call this once you know exactly which note
+    the user means. After the user agrees, call delete_note.
+    """
+
+    note_ref: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "The id of the note, as a number, taken from a previous "
+            "search_notes result."
+        ),
+    )
+
+
+class PreviewDeleteAll(BaseModel):
+    """Warn the user that ALL their notes would be deleted, and ask them.
+
+    This does NOT delete anything.
+
+    Use only when the user clearly asks to remove everything: "delete all my
+    notes", "clear everything", "احذف كل الملاحظات".
+
+    If they only want some notes gone ("delete my API notes"), do NOT use
+    this - search first and delete them one by one.
+    """
+
+    reason: str = Field(
+        "",
+        description=(
+            "Optional: what the user said they wanted, in a few words. "
+            "Leave empty if they simply asked to delete everything."
+        ),
+    )
+
+
+class DeleteAllNotes(BaseModel):
+    """Actually delete EVERY note. This cannot be undone.
+
+    Never call this first, and never call it just because the user said
+    "yes". Call preview_delete_all, and only call this after the user has
+    typed the exact word the preview asked them for.
+    """
+
+    confirm_phrase: str = Field(
+        ...,
+        description=(
+            "The exact word the user typed to confirm. Copy what they typed, "
+            "letter for letter. Never invent it or fill it in yourself."
+        ),
+    )
+
+
 class UpdateNote(BaseModel):
-    """Change an existing note's title, body, or tags.
+    """Actually change a note, AFTER the user has agreed to a preview.
 
-    Use for: "update my standup note...", "add a deadline to that note",
-    "change the title to X", "tag that as urgent".
-
-    This needs user confirmation before it runs, so never call it twice for
-    the same request.
-
-    Do NOT invent a note_ref. If the user was vague about which note they
-    mean, call search_notes first and ask them which one.
+    Never call this first. Call preview_update, wait for the user to say yes,
+    then call this with the same values.
     """
 
     note_ref: str = Field(
@@ -175,13 +297,10 @@ class UpdateNote(BaseModel):
 
 
 class DeleteNote(BaseModel):
-    """Permanently delete a note.
+    """Actually delete a note, AFTER the user has agreed to a preview.
 
-    Use only when the user clearly asks to remove or delete a note.
-
-    This always requires user confirmation, and it cannot be undone. If there
-    is ANY doubt about which note they mean, call search_notes first instead
-    of calling this.
+    Never call this first. Call preview_delete, wait for the user to say yes,
+    then call this. It cannot be undone.
     """
 
     note_ref: str = Field(

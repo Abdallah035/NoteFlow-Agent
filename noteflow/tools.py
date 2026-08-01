@@ -6,54 +6,55 @@ subset of it, so we strip the keys it rejects and flatten optional fields.
 
 from google.genai import types
 
-from noteflow.schemas import AddNote, DeleteNote, SearchNotes, UpdateNote
+from noteflow.schemas import (
+    AddNote,
+    DeleteAllNotes,
+    DeleteNote,
+    PreviewAdd,
+    PreviewDelete,
+    PreviewDeleteAll,
+    PreviewUpdate,
+    SearchNotes,
+    UpdateNote,
+)
 
-# Keys Gemini's schema format does not accept.
-_DROP = {
-    "title",
-    "default",
-    "$defs",
-    "additionalProperties",
-    "$ref",
-    "minLength",
-    "maxLength",
-    "minimum",
-    "maximum",
-    "exclusiveMinimum",
-    "exclusiveMaximum",
-    "anyOf",
-}
+# The only keys Gemini wants. Pydantic adds several more that it rejects,
+# such as "title", "default", "minLength" and "$defs".
+_KEEP = {"type", "description", "enum", "items"}
 
 
-def _clean(schema: dict) -> dict:
-    """Remove keys the API rejects, keeping type, description, enum and items."""
-    out = {}
-    for key, value in schema.items():
-        if key in _DROP:
+def _clean(field: dict) -> dict:
+    """Keep only the keys Gemini understands."""
+    cleaned = {}
+
+    for key, value in field.items():
+        if key not in _KEEP:
             continue
-        if key == "properties":
-            out[key] = {name: _clean(sub) for name, sub in value.items()}
-        elif key == "items":
-            out[key] = _clean(value)
-        else:
-            out[key] = value
-    return out
+        if key == "items":
+            value = _clean(value)      # a list's item type is a schema too
+        cleaned[key] = value
+
+    return cleaned
 
 
-def _unwrap_optional(field_schema: dict) -> dict:
-    """Turn Pydantic's anyOf[X, null] for optional fields into plain X.
+def _unwrap_optional(field: dict) -> dict:
+    """Turn Pydantic's anyOf[X, null] into plain X.
 
-    'query: str | None' becomes anyOf[string, null], which Gemini rejects.
-    The field stays optional by simply not being listed in "required".
+    Writing 'query: str | None' makes Pydantic say "string OR null", which
+    Gemini rejects. We take the real type and drop the null. The field is
+    still optional because it is not listed in "required".
     """
-    if "anyOf" in field_schema:
-        for option in field_schema["anyOf"]:
-            if option.get("type") != "null":
-                merged = dict(option)
-                if "description" in field_schema:
-                    merged["description"] = field_schema["description"]
-                return merged
-    return field_schema
+    if "anyOf" not in field:
+        return field
+
+    for option in field["anyOf"]:
+        if option.get("type") != "null":
+            real_type = dict(option)
+            if "description" in field:
+                real_type["description"] = field["description"]
+            return real_type
+
+    return field
 
 
 def to_gemini_declaration(model, name: str) -> types.FunctionDeclaration:
@@ -80,11 +81,18 @@ def to_gemini_declaration(model, name: str) -> types.FunctionDeclaration:
 
 
 # The one place that says which tools exist. Everything else reads this.
+# The preview tools propose a change; the plain ones carry it out once the
+# user has agreed.
 TOOLS = {
-    "add_note": AddNote,
     "search_notes": SearchNotes,
+    "preview_add": PreviewAdd,
+    "preview_update": PreviewUpdate,
+    "preview_delete": PreviewDelete,
+    "preview_delete_all": PreviewDeleteAll,
+    "add_note": AddNote,
     "update_note": UpdateNote,
     "delete_note": DeleteNote,
+    "delete_all_notes": DeleteAllNotes,
 }
 
 
