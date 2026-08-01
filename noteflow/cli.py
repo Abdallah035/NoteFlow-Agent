@@ -7,7 +7,7 @@ import os
 
 from dotenv import load_dotenv
 
-from noteflow import db
+from noteflow import db, embeddings
 from noteflow.orchestrator import Agent
 
 load_dotenv()
@@ -21,6 +21,11 @@ def main():
     conn = db.connect("noteflow.db")
     db.init_schema(conn)
     agent = Agent(conn)
+
+    # Load the model now so the first search is not slow.
+    if embeddings.enabled():
+        print("Loading the embedding model...")
+        embeddings.embed("warm up")
 
     print("NoteFlow - talk to your notes. Empty line to quit.\n")
 

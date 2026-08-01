@@ -6,6 +6,7 @@
 
 import os
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,12 +14,30 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from noteflow import db
+from noteflow import db, embeddings
 from noteflow.orchestrator import Agent
 
 load_dotenv()
 
-app = FastAPI(title="NoteFlow")
+@asynccontextmanager
+async def lifespan(app):
+    """Runs once when the server starts.
+
+    We load the embedding model here so the first search is fast. Without
+    this it loads on the first search instead, and that user waits a few
+    seconds for nothing.
+    """
+    if embeddings.enabled():
+        print("Loading the embedding model...")
+        embeddings.embed("warm up")
+        print("Embedding model ready.")
+    else:
+        print("Embeddings are off. Search will use keywords only.")
+
+    yield        # the server runs here
+
+
+app = FastAPI(title="NoteFlow", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
