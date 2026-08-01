@@ -85,6 +85,18 @@ def reply(text, kind="reply", options=None):
     return {"reply": text, "kind": kind, "options": options or []}
 
 
+def friendly_error(error):
+    """Turn an API error into something the user can understand."""
+    text = str(error)
+
+    if "RESOURCE_EXHAUSTED" in text or "429" in text:
+        return "I am busy right now. Please wait a few seconds and try again."
+    if "503" in text or "UNAVAILABLE" in text:
+        return "The model is overloaded right now. Please try again."
+
+    return f"Sorry, something went wrong: {text[:150]}"
+
+
 class Agent:
     """Handles one conversation."""
 
@@ -107,9 +119,10 @@ class Agent:
         buttons = []
 
         for _ in range(MAX_STEPS):
-            response = self.ask_model()
-            if isinstance(response, str):          # an error message
-                return reply(response)
+            try:
+                response = self.ask_model()
+            except Exception as error:
+                return reply(friendly_error(error))
 
             call = self.get_tool_call(response)
 
@@ -140,23 +153,15 @@ class Agent:
         return reply("That took too many steps. Could you say it more simply?")
 
     def ask_model(self):
-        """Send the conversation and the tool list to the model.
-
-        Returns the reply, or an error message as plain text.
-        """
-        try:
-            return self.client.models.generate_content(
-                model=MODEL,
-                contents=self.state.history[-HISTORY_LIMIT:],
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT.format(today=date.today()),
-                    tools=[types.Tool(function_declarations=all_declarations())],
-                ),
-            )
-        except Exception as error:
-            if "RESOURCE_EXHAUSTED" in str(error) or "429" in str(error):
-                return "I am busy right now. Please wait a few seconds and try again."
-            return f"Sorry, something went wrong: {str(error)[:150]}"
+        """Send the conversation and the tool list to the model."""
+        return self.client.models.generate_content(
+            model=MODEL,
+            contents=self.state.history[-HISTORY_LIMIT:],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT.format(today=date.today()),
+                tools=[types.Tool(function_declarations=all_declarations())],
+            ),
+        )
 
     def get_tool_call(self, response):
         """Pull the first tool call out of the model's reply, or None."""

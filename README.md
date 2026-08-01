@@ -87,7 +87,7 @@ can hand control back to the user instead of guessing.
 | Stage | File | Job |
 |---|---|---|
 | **1. Orchestrator** | `orchestrator.py` | Runs the agent loop: ask the model, run the tool it picked, feed the result back, ask again |
-| **2. Note Matcher** | `matcher.py` | Turns "the standup note" into a real note id, or decides it cannot tell |
+| **2. Note Matcher** | `matcher.py` | Turns "the standup note" into a real note id, or decides it cannot tell. Keywords first, embeddings as a fallback |
 | **3. Safety Guard** | `guard.py` + tool split | Nothing is written until the user says yes |
 | **4. Tool Executor** | `tools.py` | Validates the model's arguments before anything runs |
 | **5. Data Layer** | `db.py` | SQLite: notes, audit log, embedding chunks |
@@ -168,41 +168,47 @@ the user actually saw.
 
 ## Finding the right note
 
-**Words first, meaning second.**
+**Words first, meaning second.** Two passes, not one blended score.
 
-`matcher.py` scores every note on its words, from 0 to 1:
+### Pass 1 — keywords
+
+Every note is scored from 0 to 1 on its words:
 
 | Signal | Weight |
 |---|---|
-| Exact title match | 35% |
-| Title keyword match | 20% |
-| Body keyword match | 15% |
-| Meaning (embeddings) | 20% |
+| Exact title match | 45% |
+| Title keyword match | 25% |
+| Body keyword match | 20% |
 | Recency | 10% |
 
-If nothing passes `0.35`, it tries again on meaning alone. That is how `فواتير`
-finds a note titled `فاتورة`, and how *"delayed deployment"* finds one that says
-*"the release was postponed"* — no shared words at all.
+Anything scoring `0.30` or above is a candidate.
 
-Keyword matches are precise, so when they work we trust them and never reach the
-fallback. A note matching the words exactly still beats one that only matches in
-meaning.
+One guard: if neither the title nor the body matched a single word, the score is
+**0**, whatever the note's age. Recency is there to break ties between real
+matches, not to turn a fresh note into one.
 
-Then it decides:
+### Pass 2 — meaning, only if pass 1 found nothing
+
+If no note passes, we search again on embedding similarity alone. That is how
+`فواتير` finds a note titled `فاتورة`, and how *"delayed deployment"* finds one
+saying *"the release was postponed"* — no shared words at all.
+
+**Why a fallback and not one blended score.** If meaning were just another
+weighted signal, a note found only by meaning would score far below the floor
+and be thrown away. Running the passes separately means keyword matches keep
+their precision, and meaning only speaks when words have nothing to say.
+
+### The decision
 
 | Outcome | When | The agent |
 |---|---|---|
-| **one** | a clear winner | uses it |
+| **one** | a clear winner above 0.75 | uses it |
 | **multiple** | close scores | asks which one |
-| **none** | nothing found either way | says so, suggests refining |
+| **none** | nothing found in either pass | says so, suggests refining |
 
 Scores of 0.80, 0.78 and 0.77 are noise, not a preference. Anything within 0.10
 of the winner counts as a tie, and the agent asks. **That is the rule that stops
 it deleting the wrong note.**
-
-With embeddings switched off the weights would only add up to 0.80, so a perfect
-match could never pass the 0.75 mark. The missing 20% is shared out over the
-other signals instead.
 
 ---
 

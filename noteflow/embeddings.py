@@ -115,9 +115,10 @@ def save_embedding(conn, note):
     conn.commit()
 
 
-# The model gives about 0.78 even to text with nothing in common, and
-# about 0.87 to a good match, so every score sits in a narrow band.
-FLOOR = 0.78
+# Measured on this model: text with nothing in common scores about 0.76,
+# and a real match about 0.81 to 0.87. Everything sits in a narrow band,
+# so we stretch that band out to 0 - 1.
+FLOOR = 0.79
 CEILING = 0.87
 
 

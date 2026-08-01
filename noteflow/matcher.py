@@ -124,13 +124,13 @@ def title_score(query: str, title: str) -> float:
     if not q_tokens or not t_tokens:
         return 0.0
 
-    # What fraction of the words the user asked for did we find?
-    overlap = _overlap(q_tokens, t_tokens)
-
-    # A title that is the query plus a little extra is still a very good
-    # match: "API" against "API migration".
+    # The whole query sits inside the title, like "API" in "API migration".
+    # That is a strong match, but not as strong as an exact one.
     if q_norm in t_norm:
-        return min(1.0, 0.8 + 0.2 * overlap)
+        return 0.9
+
+    # Otherwise: what fraction of the words the user asked for did we find?
+    overlap = _overlap(q_tokens, t_tokens)
 
     return overlap
 
@@ -174,48 +174,41 @@ def recency_score(created_at: str, now: datetime | None = None) -> float:
     return 1.0 - (days_old / 30)
 
 
-# How much each signal counts. They add up to 1.0.
+# How much each word signal counts. They add up to 1.0.
+# Meaning is not here because it is a separate fallback, not part of the mix.
 WEIGHTS = {
-    "exact_title": 0.35,
-    "title_keyword": 0.20,
-    "body_keyword": 0.15,
-    "semantic": 0.20,
+    "exact_title": 0.45,
+    "title_keyword": 0.25,
+    "body_keyword": 0.20,
     "recency": 0.10,
 }
 
 
-def score_note(query: str, note: dict, semantic: float | None = None,
-               now: datetime | None = None) -> float:
-    """Score how well one note matches a query. Returns 0.0 to 1.0.
+def score_note(query: str, note: dict, now: datetime | None = None) -> float:
+    """Score how well one note matches a query, using words only.
 
-    'semantic' comes from the embeddings in stage 7. Leave it None when
-    embeddings are switched off.
+    Returns 0.0 to 1.0. Meaning is handled separately, as a fallback in
+    match(), so it is not part of this score.
     """
-    t_score = title_score(query, note["title"])
+    title = title_score(query, note["title"])
+    body = body_score(query, note["body"])
 
-    parts = {
-        # Two different questions: "is it exact?" and "how much overlap?".
-        # An exact title collects both, which is what makes it dominate.
-        "exact_title": 1.0 if t_score == 1.0 else 0.0,
-        "title_keyword": t_score,
-        "body_keyword": body_score(query, note["body"]),
-        "recency": recency_score(note.get("created_at", ""), now),
-    }
+    # No word matched at all, so this note is simply not about the query.
+    # Without this, a note written today would score on its age alone.
+    if title == 0.0 and body == 0.0:
+        return 0.0
 
-    weights = dict(WEIGHTS)
+    # An exact title answers two questions at once - "is it exact?" and
+    # "how much overlap?" - so it collects both weights. That is what makes
+    # an exact title beat everything else.
+    exact = 1.0 if title == 1.0 else 0.0
 
-    if semantic is None:
-        # Embeddings are off. Without this, the best possible score would be
-        # 0.80, so a perfect match would fall below the 0.75 "one match"
-        # threshold and the agent would ask which note the user meant.
-        freed = weights.pop("semantic")
-        total = sum(weights.values())
-        for key in weights:
-            weights[key] += freed * (weights[key] / total)
-    else:
-        parts["semantic"] = semantic
-
-    return sum(parts[key] * weights[key] for key in parts)
+    return (
+        exact * WEIGHTS["exact_title"]
+        + title * WEIGHTS["title_keyword"]
+        + body * WEIGHTS["body_keyword"]
+        + recency_score(note.get("created_at", ""), now) * WEIGHTS["recency"]
+    )
 
 
 # The three things the matcher can conclude.
@@ -224,12 +217,12 @@ MULTIPLE = "multiple"
 NONE = "none"
 
 STRONG = 0.75      # above this we are confident
-WEAK = 0.35        # below this it is not a real match
+WEAK = 0.30        # below this it is not a real match
 TIE_GAP = 0.10     # two scores this close are a tie, not a winner
 
-# When keywords find nothing, we fall back to meaning alone. Real matches
-# score about 0.4 and above, unrelated notes about 0.1, so this sits between.
-SEMANTIC_ONLY = 0.35
+# When keywords find nothing, we fall back to meaning alone. Unrelated notes
+# stretch down to 0, so anything with real meaning left is worth showing.
+SEMANTIC_ONLY = 0.20
 
 
 def match(note_ref: str, notes: list[dict], semantic_scores: dict | None = None,
