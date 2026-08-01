@@ -27,3 +27,7 @@ noteflow/dbcli.py
 # Editor
 .vscode/
 .idea/
+
+# Local vector store data
+qdrant_data/
+chroma_data/

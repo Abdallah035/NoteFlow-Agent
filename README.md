@@ -286,13 +286,24 @@ so moving it to Redis is one function.
 **No LangGraph.** The routing is a small state machine that reads in three
 lines. A framework would hide the tool loop, which is the part worth showing.
 
-**Vectors in SQLite, not a vector database.** Comparing a few hundred normalised
-vectors with numpy takes under a millisecond, while the LLM call in the same
-request takes 500–2000ms — so the search is not the bottleneck. `vectorstore.py`
-holds a working Qdrant adapter behind a flag to prove the swap is contained to
-one file. At roughly 10k vectors I would switch, and I would pick **pgvector**,
-so notes and vectors stay in one database and one transaction instead of keeping
-two stores in sync.
+**Vectors in SQLite by default, Qdrant behind a flag.** Comparing a few hundred
+normalised vectors with numpy takes under a millisecond, while the LLM call in
+the same request takes 500–2000ms — so the search is not the bottleneck, and a
+vector database would be infrastructure without a payoff at this size.
+
+`vectorstore.py` holds a working Qdrant backend, switched on with
+`NOTEFLOW_VECTORDB=1`. It runs from a local folder, so there is no server to
+install, and it produces the same results as the SQLite path. It is there to
+show the swap is real and contained to one file — every other part of the app
+is unaware of how vectors are stored.
+
+At roughly 10k vectors I would switch for good, and I would pick **pgvector**,
+so notes and vectors stay in one database and one transaction instead of
+keeping two stores in sync.
+
+One limit of the local mode: Qdrant locks its folder, so only one process can
+open it at a time. A real deployment would point at a Qdrant server instead,
+which is a one-line change to the client.
 
 **Notes are hard deleted.** The audit log keeps the content, so nothing is truly
 lost, and no query has to remember a `WHERE deleted_at IS NULL`.
