@@ -1,0 +1,25 @@
+# Database files (generated data, not code)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Secrets — never commit API keys
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Test and tool caches
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+noteflow/dbcli.py
+# Editor
+.vscode/
+.idea/
